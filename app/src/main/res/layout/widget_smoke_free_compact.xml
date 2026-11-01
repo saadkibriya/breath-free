@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Top mini header -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:src="@drawable/ic_sprout"
+            android:contentDescription="Sprout" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="BREATHEFREE"
+            android:textColor="#34D399"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Large Days Count -->
+    <TextView
+        android:id="@+id/widget_text_days"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="14"
+        android:textColor="#10B981"
+        android:textSize="38sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_text_hours_compact"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="DAYS • 8H"
+        android:textColor="#A7F3D0"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <!-- Daily and Total Money Saved -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_stat_box"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingVertical="4dp">
+
+        <TextView
+            android:id="@+id/widget_text_daily_saved"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="$12.50 / day"
+            android:textColor="#FBBF24"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_text_total_saved"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="$182.40 saved"
+            android:textColor="#34D399"
+            android:textSize="10sp" />
+    </LinearLayout>
+</LinearLayout>

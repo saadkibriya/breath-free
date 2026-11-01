@@ -1,0 +1,6 @@
+{
+  "name": "BreatheFree",
+  "description": "Smoke-free journey tracker with home screen widgets, live day and hour counter, money saved daily, and craving relief.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
