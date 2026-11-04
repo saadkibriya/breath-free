@@ -67,7 +67,28 @@ jobs:
           fi
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: |
+          set +e
+          gradle assembleDebug --console=plain --no-daemon > build.log 2>&1
+          CODE=$?
+          echo "Gradle exit code: $CODE"
+          if [ $CODE -ne 0 ]; then
+            echo "===== ERRORS ====="
+            grep -E '^e: ' build.log | head -40
+            echo "----- What went wrong -----"
+            sed -n '/What went wrong/,/\* Try:/p' build.log | head -50
+            echo "----- Aapt/resource/manifest errors -----"
+            grep -iE 'AAPT|Manifest merger|Duplicate class|Could not resolve|Unresolved reference' build.log | head -30
+          fi
+          exit $CODE
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
 
       - name: Collect APK
         run: |
