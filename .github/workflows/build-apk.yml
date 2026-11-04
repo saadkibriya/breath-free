@@ -5,6 +5,9 @@ on:
   push:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,112 +18,65 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Detect project type
-        id: detect
+      - name: Pick Gradle version from AGP version
+        id: gv
         run: |
-          if [ -f pubspec.yaml ]; then T=flutter
-          elif ls capacitor.config.* >/dev/null 2>&1; then T=capacitor
-          elif [ -f package.json ] && grep -Eq '"(expo|react-native)"' package.json; then T=reactnative
-          elif [ -f gradlew ]; then T=android
-          elif [ -f index.html ] || [ -f package.json ]; then T=web
-          else T=unknown; fi
-          echo "type=$T" >> "$GITHUB_OUTPUT"
-          echo "Detected project type: $T"
-
-      - name: Unknown project
-        if: steps.detect.outputs.type == 'unknown'
-        run: |
-          echo "Could not detect project type. Files in repo root:"
-          ls -la
-          exit 1
-
-      # ---------- Flutter ----------
-      - uses: subosito/flutter-action@v2
-        if: steps.detect.outputs.type == 'flutter'
-        with:
-          channel: stable
-          cache: true
-
-      - name: Build Flutter APK
-        if: steps.detect.outputs.type == 'flutter'
-        run: |
-          [ -d android ] || flutter create --platforms=android .
-          flutter pub get
-          flutter build apk --release || flutter build apk --debug
-
-      # ---------- Native Android ----------
-      - name: Build native Android APK
-        if: steps.detect.outputs.type == 'android'
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      # ---------- Capacitor ----------
-      - name: Build Capacitor APK
-        if: steps.detect.outputs.type == 'capacitor'
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
-          npm run build --if-present
-          [ -d android ] || npx cap add android
-          npx cap sync android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      # ---------- React Native / Expo ----------
-      - name: Build React Native APK
-        if: steps.detect.outputs.type == 'reactnative'
-        run: |
-          if [ -f package-lock.json ]; then npm ci
-          elif [ -f yarn.lock ]; then yarn install --frozen-lockfile
-          else npm install; fi
-          [ -d android ] || npx expo prebuild --platform android --no-install
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
-
-      # ---------- Plain web (HTML / Vite / React) wrapped with Capacitor ----------
-      - name: Wrap web app and build APK
-        if: steps.detect.outputs.type == 'web'
-        run: |
-          SRC=.
-          if [ -f package.json ] && grep -q '"build"' package.json; then
-            if [ -f package-lock.json ]; then npm ci; else npm install; fi
-            npm run build
-            for d in dist build out; do
-              if [ -f "$d/index.html" ]; then SRC=$d; break; fi
-            done
+          AGP=""
+          if [ -f gradle/libs.versions.toml ]; then
+            AGP=$(grep -E '^\s*(agp|androidGradlePlugin|android-gradle-plugin)\s*=' gradle/libs.versions.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           fi
-          mkdir -p www
-          if [ "$SRC" = "." ]; then
-            rsync -a --exclude=.git --exclude=.github --exclude=www --exclude=node_modules ./ www/
-          else
-            cp -r "$SRC"/. www/
-          fi
-          [ -f package.json ] || npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap init "Breathe Free" com.saad.breathefree --web-dir=www
-          npx cap add android
-          npx cap sync android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          echo "Detected AGP version: '$AGP'"
+          case "$AGP" in
+            8.*) G=8.14.3 ;;
+            *)   G=current ;;
+          esac
+          echo "Using Gradle: $G"
+          echo "gradle=$G" >> "$GITHUB_OUTPUT"
 
-      # ---------- Collect ----------
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ steps.gv.outputs.gradle }}
+
+      - name: Prepare missing config files
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GEMINI_API_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          KEY="${GEMINI_API_KEY_SECRET:-MY_GEMINI_API_KEY}"
+          [ -f .env ] || echo "GEMINI_API_KEY=$KEY" > .env
+          [ -f secrets.properties ] || echo "GEMINI_API_KEY=$KEY" > secrets.properties
+
+          if [ ! -f app/google-services.json ]; then
+            if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+              printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+              echo "Used google-services.json from repo secret"
+            else
+              PKG=""
+              for f in app/build.gradle.kts app/build.gradle; do
+                if [ -f "$f" ] && [ -z "$PKG" ]; then
+                  PKG=$(grep -oE 'applicationId\s*=?\s*"[^"]+"' "$f" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+                  [ -n "$PKG" ] || PKG=$(grep -oE 'namespace\s*=?\s*"[^"]+"' "$f" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+                fi
+              done
+              [ -n "$PKG" ] || PKG="com.example.breathefree"
+              echo "Creating placeholder google-services.json for package: $PKG"
+              printf '{"project_info":{"project_number":"000000000000","project_id":"placeholder","storage_bucket":"placeholder.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"%s"}},"api_key":[{"current_key":"placeholder"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' "$PKG" > app/google-services.json
+            fi
+          fi
+
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace --no-daemon
+
       - name: Collect APK
         run: |
           mkdir -p apk-out
-          find . -name "*.apk" -path "*outputs*" -not -path "./apk-out/*" -exec cp {} apk-out/ \;
+          find . -path "*build/outputs/apk*" -name "*.apk" -not -path "./apk-out/*" -exec cp {} apk-out/ \;
           ls -la apk-out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: breathe-free-apk
+          name: breath-free-apk
           path: apk-out/*.apk
           if-no-files-found: error
